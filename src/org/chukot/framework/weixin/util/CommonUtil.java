@@ -12,6 +12,7 @@ import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
+import javax.servlet.http.HttpServletRequest;
 
 import org.chukot.framework.service.MyX509TrustManager;
 import org.chukot.framework.weixin.model.Token;
@@ -107,6 +108,36 @@ public class CommonUtil {
 		}
 		
 		return token;
+	}
+	
+	public static String getFileExt(String contentType) {
+		String fileExt = "";
+		if ("image/jpeg".equals(contentType)) {
+			fileExt = ".jpg";
+		} else if ("audio/mpeg".equals(contentType)) {
+			fileExt = ".mp3";
+		} else if ("audio/amr".equals(contentType)) {
+			fileExt = ".amr";
+		} else if ("video/mp4".equals(contentType)) {
+			fileExt = ".mp4";
+		} else if ("video/mpeg4".equals(contentType)) {
+			fileExt = ".mp4";
+		}
+		return fileExt;
+	}
+	
+	public static String emoji(int codePoint) {
+		return String.valueOf(Character.toChars(codePoint));
+	}
+	
+	/**
+	 * 判断是否为微信浏览器
+	 * @param request
+	 * @return
+	 */
+	public static boolean isMicroMessenger(HttpServletRequest request) {
+		String userAgent = request.getHeader("User-Agent");
+		return userAgent.contains("MicroMessenger");
 	}
 	
 }

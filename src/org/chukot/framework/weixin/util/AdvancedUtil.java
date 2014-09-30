@@ -1,14 +1,23 @@
 package org.chukot.framework.weixin.util;
 
 import java.io.BufferedInputStream;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.util.List;
 
 import javax.net.ssl.HttpsURLConnection;
 
+import org.apache.commons.lang.RandomStringUtils;
 import org.apache.commons.lang.StringUtils;
+import org.chukot.framework.weixin.model.advanced.Group;
+import org.chukot.framework.weixin.model.advanced.Media;
 import org.chukot.framework.weixin.model.advanced.Oauth2Token;
 import org.chukot.framework.weixin.model.advanced.SNSUserInfo;
 import org.chukot.framework.weixin.model.advanced.TemporaryQRCode;
@@ -23,7 +32,21 @@ import com.alibaba.fastjson.JSONObject;
 public class AdvancedUtil {
 	
 	private static Logger log = LoggerFactory.getLogger(AdvancedUtil.class);
-	
+
+	// 创建分组
+	public final static String groups_create_url = "https://api.weixin.qq.com/cgi-bin/groups/create?access_token=ACCESS_TOKEN";
+	// 查询所有分组
+	public final static String groups_get_url = "https://api.weixin.qq.com/cgi-bin/groups/get?access_token=ACCESS_TOKEN";
+	// 查询用户所在分组
+	public final static String groups_getid_url = "https://api.weixin.qq.com/cgi-bin/groups/getid?access_token=ACCESS_TOKEN";
+	// 移动用户分组
+	public final static String groups_member_update_url = "https://api.weixin.qq.com/cgi-bin/groups/members/update?access_token=ACCESS_TOKEN";
+	// 修改分组名
+	public final static String groups_update_url = "https://api.weixin.qq.com/cgi-bin/groups/update?access_token=ACCESS_TOKEN";
+	// 下载多媒体文件
+	public final static String media_get_url = "http://file.api.weixin.qq.com/cgi-bin/media/get?access_token=ACCESS_TOKEN&media_id=MEDIA_ID";
+	// 上传多媒体文件
+	public final static String media_upload_url = "http://file.api.weixin.qq.com/cgi-bin/media/upload?access_token=ACCESS_TOKEN&type=TYPE";
 	// 获取access_token
 	public final static String oauth2_access_token_url = "https://api.weixin.qq.com/sns/oauth2/access_token?appid=APPID&secret=SECRET&code=CODE&grant_type=authorization_code";
 	// 刷新access_token
@@ -206,6 +229,138 @@ public class AdvancedUtil {
 	}
 	
 	/**
+	 * 创建分组
+	 * @param accessToken
+	 * @param groupName
+	 * @return
+	 */
+	public static Group createGroup(String accessToken, String groupName) {
+		Group group = null;
+		String requestUrl = groups_create_url.replace("ACCESS_TOKEN", accessToken);
+		String jsonData = "{\"group\":{\"name\":\"%s\"}}";
+		// 创建分组
+		JSONObject jsonObject = CommonUtil.httpsRequest(requestUrl, "POST", String.format(jsonData, groupName));
+		
+		if (null != jsonObject) {
+			if (StringUtils.isNotEmpty(jsonObject.getString("group"))) {
+				group = JSON.parseObject(jsonObject.getString("group"), Group.class);
+			} else {
+				int errorCode = jsonObject.getIntValue("errcode");
+				String errorMsg = jsonObject.getString("errmsg");
+				log.error("创建分组失败 errcode:{} errmsg:{}", errorCode, errorMsg);
+			}
+		}
+		
+		return group;
+	}
+	
+	/**
+	 * 修改分组名
+	 * @param accessToken
+	 * @param groupId
+	 * @param groupName
+	 * @return
+	 */
+	public static boolean updateGroup(String accessToken, int groupId, String groupName) {
+		boolean result = false;
+		String requestUrl = groups_update_url.replace("ACCESS_TOKEN", accessToken);
+		String jsonData = "{\"group\":{\"id\":%d,\"name\":\"%s\"}}";
+		// 修改分组名
+		JSONObject jsonObject = CommonUtil.httpsRequest(requestUrl, "POST", String.format(jsonData, groupId, groupName));
+		
+		if (null != jsonObject) {
+			int errorCode = jsonObject.getIntValue("errcode");
+			String errorMsg = jsonObject.getString("errmsg");
+			if (0 == errorCode) {
+				result = true;
+				log.info("修改分组名成功 errcode:{} errmsg:{}", errorCode, errorMsg);
+			} else {
+				log.error("修改分组名失败 errcode:{} errmsg:{}", errorCode, errorMsg);
+			}
+		}
+		
+		return result;
+	}
+	
+	/**
+	 * 移动用户分组
+	 * @param accessToken
+	 * @param openId
+	 * @param groupId
+	 * @return
+	 */
+	public static boolean updateMemberGroup(String accessToken, String openId, int groupId) {
+		boolean result = false;
+		String requestUrl = groups_member_update_url.replace("ACCESS_TOKEN", accessToken);
+		String jsonData = "{\"openid\":\"%s\",\"to_groupid\":%d}";
+		// 移动用户分组
+		JSONObject jsonObject = CommonUtil.httpsRequest(requestUrl, "POST", String.format(jsonData, openId, groupId));
+		
+		if (null != jsonObject) {
+			int errorCode = jsonObject.getIntValue("errcode");
+			String errorMsg = jsonObject.getString("errmsg");
+			if (0 == errorCode) {
+				result = true;
+				log.info("移动用户分组成功 errcode:{} errmsg:{}", errorCode, errorMsg);
+			} else {
+				log.error("移动用户分组失败 errcode:{} errmsg:{}", errorCode, errorMsg);
+			}
+		}
+		
+		return result;
+	}
+	
+	/**
+	 * 查询用户所在分组
+	 * @param accessToken
+	 * @param openId
+	 * @return
+	 */
+	public static int getGroupId(String accessToken, String openId) {
+		int groupId = -1;
+		String requestUrl = groups_getid_url.replace("ACCESS_TOKEN", accessToken);
+		String jsonData = "{\"openid\":\"%s\"}";
+		// 查询用户所在分组
+		JSONObject jsonObject = CommonUtil.httpsRequest(requestUrl, "POST", String.format(jsonData, openId));
+		
+		if (null != jsonObject) {
+			if (null != jsonObject.getInteger("groupid")) {
+				groupId = jsonObject.getIntValue("groupid");
+			} else {
+				int errorCode = jsonObject.getIntValue("errcode");
+				String errorMsg = jsonObject.getString("errmsg");
+				log.error("查询用户所在分组失败 errcode:{} errmsg:{}", errorCode, errorMsg);
+			}
+		}
+		
+		return groupId;
+	}
+	
+	/**
+	 * 查询所有分组
+	 * @param accessToken
+	 * @return
+	 */
+	public static List<Group> getGroups(String accessToken) {
+		List<Group> groupList = null;
+		String requestUrl = groups_get_url.replace("ACCESS_TOKEN", accessToken);
+		// 查询所有分组
+		JSONObject jsonObject = CommonUtil.httpsRequest(requestUrl, "GET", null);
+		
+		if (null != jsonObject) {
+			if (StringUtils.isNotEmpty(jsonObject.getString("groups"))) {
+				groupList = JSON.parseArray(jsonObject.getString("groups"), Group.class);
+			} else {
+				int errorCode = jsonObject.getIntValue("errcode");
+				String errorMsg = jsonObject.getString("errmsg");
+				log.error("查询所有分组失败 errcode:{} errmsg:{}", errorCode, errorMsg);
+			}
+		}
+		
+		return groupList;
+	}
+	
+	/**
 	 * 创建临时带参数二维码
 	 * @param accessToken
 	 * @param expireSeconds
@@ -306,4 +461,115 @@ public class AdvancedUtil {
 		return filePath;
 	}
 	
+	/**
+	 * 上传媒体文件
+	 * @param accessToken
+	 * @param type
+	 * @param mediaFileUrl
+	 * @return
+	 */
+	public static Media uploadMedia(String accessToken, String type, String mediaFileUrl) {
+		Media media = null;
+		String uploadMediaUrl = media_upload_url.replace("ACCESS_TOKEN", accessToken).replace("TYPE", type);
+		// 定义数据分隔符
+		String boundary = "----" + RandomStringUtils.random(15, true, true).toLowerCase();
+		
+		try {
+			URL uploadUrl = new URL(uploadMediaUrl);
+			HttpURLConnection uploadConn = (HttpURLConnection) uploadUrl.openConnection();
+			uploadConn.setDoInput(true);
+			uploadConn.setDoOutput(true);
+			uploadConn.setRequestMethod("POST");
+			uploadConn.setRequestProperty("Content-Type", "multipart/form-data;boundary=" + boundary);
+			// 获取媒体文件上传的输出流（往微信服务器写数据）
+			OutputStream outputStream = uploadConn.getOutputStream();
+			URL mediaUrl = new URL(mediaFileUrl);
+			HttpURLConnection mediaConn = (HttpURLConnection) mediaUrl.openConnection();
+			mediaConn.setDoOutput(true);
+			mediaConn.setRequestMethod("GET");
+			// 从请求头中的获取内容类型
+			String contentType = mediaConn.getHeaderField("Content-Type");
+			// 根据内容类型判断文件扩展名
+			String fileExt = CommonUtil.getFileExt(contentType);
+			// 请求体开始
+			outputStream.write(("--" + boundary + "\r\n").getBytes());
+			outputStream.write(String.format("Content-Disposition: form-data; name=\"media\";filename=\"file%s\"\r\n", fileExt).getBytes());
+			outputStream.write(String.format("Content-Type: %s\r\n\r\n", contentType).getBytes());
+			// 获取媒体文件的输入流（读取文件）
+			BufferedInputStream bis = new BufferedInputStream(mediaConn.getInputStream());
+			byte[] buf = new byte[8096];
+			int size = 0;
+			while ((size = bis.read(buf)) != -1) {
+				outputStream.write(buf, 0, size);
+			}
+			// 请求体结束
+			outputStream.write(("\r\n--" + boundary + "--\r\n").getBytes());
+			outputStream.close();
+			bis.close();
+			mediaConn.disconnect();
+			// 获取媒体文件上传的输入流（从微信服务器读数据）
+			InputStream inputStream = uploadConn.getInputStream();
+			InputStreamReader inputStreamReader = new InputStreamReader(inputStream, "UTF-8");
+			BufferedReader bufferedReader = new BufferedReader(inputStreamReader);
+			StringBuffer buffer = new StringBuffer();
+			String str = null;
+			while ((str = bufferedReader.readLine()) != null) {
+				buffer.append(str);
+			}
+			bufferedReader.close();
+			inputStreamReader.close();
+			inputStream.close();
+			inputStream = null;
+			uploadConn.disconnect();
+			
+			media = JSON.parseObject(buffer.toString(), Media.class);
+		} catch (Exception e) {
+			media = null;
+			log.error("上传媒体文件失败：{}", e);
+		}
+		
+		return media;
+	}
+	
+	/**
+	 * 下载多媒体文件
+	 * @param accessToken
+	 * @param mediaId
+	 * @param savePath
+	 * @return
+	 */
+	public static String getMedia(String accessToken, String mediaId, String savePath) {
+		String filePath = null;
+		String requestUrl = media_get_url.replace("ACCESS_TOKEN", accessToken).replace("MEDIA_ID", mediaId);
+		
+		try {
+			URL url = new URL(requestUrl);
+			HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+			conn.setDoInput(true);
+			conn.setRequestMethod("GET");
+			
+			if (!savePath.endsWith("/")) {
+				savePath += "/";
+			}
+			String fileExt = CommonUtil.getFileExt(conn.getHeaderField("Content-Type"));
+			filePath = savePath + mediaId + fileExt;
+			
+			BufferedInputStream bis = new BufferedInputStream(conn.getInputStream());
+			FileOutputStream fos = new FileOutputStream(new File(filePath));
+			byte[] buf = new byte[8096];
+			int size = 0;
+			while ((size = bis.read(buf)) != -1) {
+				fos.write(buf, 0, size);
+			}
+			fos.close();
+			bis.close();
+			conn.disconnect();
+			log.info("下载多媒体文件成功，filePath=" + filePath);
+		} catch (Exception e) {
+			filePath = null;
+			log.error("下载多媒体文件失败：{}", e);
+		}
+		
+		return filePath;
+	}
 }
